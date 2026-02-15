@@ -1,5 +1,6 @@
 require('dotenv').config();
 const express = require('express');
+const mongoose = require('mongoose');
 const cors = require('cors');
 
 const app = express();
@@ -8,71 +9,56 @@ const app = express();
 app.use(express.json());
 app.use(cors());
 
-// --- MOCK DATABASE (Temporary Storage in RAM) ---
-// Since we don't have MongoDB installed, we store data here.
-const users = []; 
-const applications = [];
+// --- 1. Database Connection ---
+// This pulls the connection string from your .env file
+const dbURI = process.env.MONGO_URI;
 
-// --- API ROUTES ---
+mongoose.connect(dbURI)
+    .then(() => console.log('✅ Real MongoDB Atlas Connected!'))
+    .catch(err => console.log('❌ Database Connection Error:', err.message));
 
-// 1. Home Route
+// --- 2. Database Schema (The Blueprint) ---
+const ApplicationSchema = new mongoose.Schema({
+    fullName: { type: String, required: true },
+    email: { type: String, required: true },
+    jobRole: { type: String, required: true },
+    status: { type: String, default: 'Pending' },
+    date: { type: Date, default: Date.now }
+});
+
+const Application = mongoose.model('Application', ApplicationSchema);
+
+// --- 3. API Routes ---
+
+// Default Route
 app.get('/', (req, res) => {
-    res.send('✅ NotWorking Backend API is Running!');
+    res.send('🚀 NotWorking Backend API with Real DB is Running!');
 });
 
-// 2. Register User (Mock)
-app.post('/api/register', (req, res) => {
-    const { username, password } = req.body;
-    
-    // Check if user exists
-    const userExists = users.find(u => u.username === username);
-    if (userExists) {
-        return res.status(400).json({ message: 'User already exists' });
+// POST: Submit a Job Application
+app.post('/api/apply', async (req, res) => {
+    try {
+        const { fullName, email, jobRole } = req.body;
+        const newApp = new Application({ fullName, email, jobRole });
+        await newApp.save();
+        res.status(201).json({ message: 'Application saved to Cloud Database!', data: newApp });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
     }
-
-    const newUser = { id: users.length + 1, username, password };
-    users.push(newUser);
-    
-    console.log('User Registered:', newUser); // Show in terminal
-    res.status(201).json({ message: 'User registered successfully', user: newUser });
 });
 
-// 3. Login User (Mock)
-app.post('/api/login', (req, res) => {
-    const { username, password } = req.body;
-    
-    const user = users.find(u => u.username === username && u.password === password);
-    
-    if (!user) {
-        return res.status(400).json({ message: 'Invalid credentials' });
+// GET: View All Applications
+app.get('/api/applications', async (req, res) => {
+    try {
+        const apps = await Application.find().sort({ date: -1 });
+        res.json(apps);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
     }
-
-    res.json({ message: 'Login successful', token: 'fake-jwt-token-12345' });
 });
 
-// 4. Submit Application (Mock)
-app.post('/api/apply', (req, res) => {
-    const { fullName, jobRole, email } = req.body;
-    
-    const newApp = {
-        id: applications.length + 1,
-        fullName,
-        jobRole,
-        email,
-        status: 'Pending',
-        date: new Date()
-    };
-    
-    applications.push(newApp);
-    console.log('Application Received:', newApp); // Show in terminal
-    res.status(201).json({ message: 'Application submitted successfully', application: newApp });
+// --- 4. Start Server ---
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, () => {
+    console.log(`🚀 Server is live on port ${PORT}`);
 });
-
-// 5. Get All Applications (Mock)
-app.get('/api/applications', (req, res) => {
-    res.json(applications);
-});
-
-// --- Start Server ---
-const PORT = 5000;
-app.listen(PORT, () => console.log(`🚀 Server started on port ${PORT}`));
